@@ -281,13 +281,14 @@ const districts=[
 ];
 const distLayer=L.layerGroup();
 const distPolygons={};
+const distLabels={};
+const distByReg={РА:[],АК:[]};
 districts.forEach((d,i)=>{
   const poly=L.polygon(d.poly,{
     color:'#555',weight:1.2,fillOpacity:0,dashArray:'4 3'
   }).bindTooltip(d.n,{sticky:true});
   distPolygons[d.n]=poly;
   distLayer.addLayer(poly);
-  // подпись маленькими буквами по центру района
   const bounds=poly.getBounds();
   const center=bounds.getCenter();
   const label=L.marker(center,{icon:L.divIcon({
@@ -295,7 +296,9 @@ districts.forEach((d,i)=>{
     html:'<div style="font-size:9px;font-weight:500;color:#444;text-shadow:1px 1px 2px #fff,-1px -1px 2px #fff;white-space:nowrap;pointer-events:none">'+d.n+'</div>',
     iconSize:[80,14],iconAnchor:[40,7]
   })});
+  distLabels[d.n]=label;
   distLayer.addLayer(label);
+  if(distByReg[d.reg])distByReg[d.reg].push(d.n);
 });
 distLayer.addTo(map);
 
@@ -371,40 +374,41 @@ rivers.forEach(r=>{
 
 // === CITIES ===
 const cities=[
-  {n:'Барнаул',lat:53.3548,lon:83.7696,capital:true},
-  {n:'Бийск',lat:52.5394,lon:85.2139,capital:false},
-  {n:'Славгород',lat:52.9986,lon:78.6459,capital:false},
-  {n:'Камень-на-Оби',lat:53.7914,lon:81.3545,capital:false},
-  {n:'Алейск',lat:52.4922,lon:82.7794,capital:false},
-  {n:'Рубцовск',lat:51.5012,lon:81.2089,capital:false},
-  {n:'Горно-Алтайск',lat:51.9581,lon:85.9603,capital:true},
-  {n:'Чемал',lat:51.4026,lon:86.0011,capital:false},
-  {n:'Усть-Кокса',lat:50.2681,lon:85.6146,capital:false},
-  {n:'Усть-Улаган',lat:50.9324,lon:87.9966,capital:false},
-  {n:'Кош-Агач',lat:50.0137,lon:88.6673,capital:false},
-  {n:'Телецкое озеро',lat:51.7500,lon:87.6800,lake:true}
+  {n:'Барнаул',lat:53.3548,lon:83.7696,capital:true,reg:'АК'},
+  {n:'Бийск',lat:52.5394,lon:85.2139,capital:false,reg:'АК'},
+  {n:'Славгород',lat:52.9986,lon:78.6459,capital:false,reg:'АК'},
+  {n:'Камень-на-Оби',lat:53.7914,lon:81.3545,capital:false,reg:'АК'},
+  {n:'Алейск',lat:52.4922,lon:82.7794,capital:false,reg:'АК'},
+  {n:'Рубцовск',lat:51.5012,lon:81.2089,capital:false,reg:'АК'},
+  {n:'Горно-Алтайск',lat:51.9581,lon:85.9603,capital:true,reg:'РА'},
+  {n:'Чемал',lat:51.4026,lon:86.0011,capital:false,reg:'РА'},
+  {n:'Усть-Кокса',lat:50.2681,lon:85.6146,capital:false,reg:'РА'},
+  {n:'Усть-Улаган',lat:50.9324,lon:87.9966,capital:false,reg:'РА'},
+  {n:'Кош-Агач',lat:50.0137,lon:88.6673,capital:false,reg:'РА'},
+  {n:'Телецкое озеро',lat:51.7500,lon:87.6800,lake:true,reg:'РА'}
 ];
 const cityLayer=L.layerGroup().addTo(map);
+const cityMarkers={};
 cities.forEach(c=>{
   if(c.lake){
     const m=L.marker([c.lat,c.lon],{icon:L.divIcon({className:'',html:'',iconSize:[0,0]})});
     m.bindTooltip(c.n,{permanent:true,direction:'right',className:'lbl-river',offset:[8,0]});
     cityLayer.addLayer(m);
+    cityMarkers[c.n]={m,reg:c.reg};
     return;
   }
-  const sz=c.capital?10:7;
+  const sz=c.capital?14:8;
   const border=c.capital?3:2;
+  const inner=c.capital?'background:#fff;border:'+border+'px solid #333':'background:#fff;border:'+border+'px solid #555';
   const icon=L.divIcon({
     className:'',
-    html:'<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:#fff;border:'+border+'px solid #333;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
+    html:'<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;'+inner+';box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
     iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
   });
   const m=L.marker([c.lat,c.lon],{icon:icon});
-  const fsz=c.capital?'14px':'11px';
-  const fw=c.capital?'800':'600';
-  m.bindTooltip(c.n,{permanent:true,direction:'right',offset:[8,0],className:'lbl-city'});
-  m.getTooltip().options.className=c.capital?'lbl-city-cap':'lbl-city';
+  m.bindTooltip(c.n,{permanent:true,direction:'right',offset:[10,0],className:c.capital?'lbl-city-cap':'lbl-city'});
   cityLayer.addLayer(m);
+  cityMarkers[c.n]={m,reg:c.reg};
 });
 
 // === LAYER CHECKBOXES ===
@@ -414,8 +418,25 @@ cities.forEach(c=>{
     if(this.checked)map.addLayer(lg);else map.removeLayer(lg);
   };
 });
-document.getElementById('chk_kra').onchange=function(){if(this.checked)map.addLayer(kraLayer);else map.removeLayer(kraLayer)};
-document.getElementById('chk_rep').onchange=function(){if(this.checked)map.addLayer(repLayer);else map.removeLayer(repLayer)};
+function toggleRegionDistricts(reg, show){
+  (distByReg[reg]||[]).forEach(name=>{
+    const p=distPolygons[name];
+    const l=distLabels[name];
+    if(show){distLayer.addLayer(p);distLayer.addLayer(l)}
+    else{distLayer.removeLayer(p);distLayer.removeLayer(l)}
+  });
+  Object.values(cityMarkers).forEach(({m,reg:r})=>{
+    if(r===reg){if(show)cityLayer.addLayer(m);else cityLayer.removeLayer(m)}
+  });
+}
+document.getElementById('chk_kra').onchange=function(){
+  if(this.checked)map.addLayer(kraLayer);else map.removeLayer(kraLayer);
+  toggleRegionDistricts('АК',this.checked);
+};
+document.getElementById('chk_rep').onchange=function(){
+  if(this.checked)map.addLayer(repLayer);else map.removeLayer(repLayer);
+  toggleRegionDistricts('РА',this.checked);
+};
 distLayer.addTo(map);
 
 // === INDIVIDUAL OBJECT CHECKBOXES ===
